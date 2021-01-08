@@ -14,5 +14,6 @@ cmake ..
 1. First modify this configuration file example/config.py
 ```bash
 cd build
+cp -r ../src/python-lib .
 ./sge-server ../example/config.py
 ```
