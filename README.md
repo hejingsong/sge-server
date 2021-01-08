@@ -8,6 +8,7 @@ Check if python3 is installed and python3-config is in the `$PATH`
 ```bash
 mkdir build && cd build
 cmake ..
+make
 ```
 
 #### use
