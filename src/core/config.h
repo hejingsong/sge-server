@@ -8,6 +8,7 @@ typedef struct {
 	const char* entry_func;
 	const char* socket;
 	const char* user;
+	const char* libdir;
 	cb_worker cb;
 	int daemon;
 } sge_config;

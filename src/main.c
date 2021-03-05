@@ -17,6 +17,7 @@ int main(int argc, char const *argv[]) {
 		.entry_func = NULL,
 		.socket = NULL,
 		.user = NULL,
+		.libdir = NULL,
 		.cb = NULL,
 		.daemon = 0
 	};

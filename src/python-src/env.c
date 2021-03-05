@@ -111,7 +111,6 @@ create_conn(int id) {
 	PyObject_SetAttrString(conn, "close", PyCFunction_New(&def_close, conn));
 	PyObject_SetAttrString(conn, "send", PyCFunction_New(&def_send, conn));
 RET:
-	Py_XDECREF(module);
 	return conn;
 }
 
@@ -294,6 +293,7 @@ parser_daemon(PyObject* py_config, sge_config* config) {
 	if (py_daemon == Py_False) {
 		goto RET;
 	}
+	daemon = 1;
 	PARSE_STRING(py_config, logfile, config, 0);
 
 RET:
@@ -309,25 +309,72 @@ parse_config(PyObject* py_config, sge_config* config) {
 	PARSE_STRING(py_config, entry_func, config, 0);
 	PARSE_STRING(py_config, socket, config, 0);
 	PARSE_STRING(py_config, user, config, 1);
+	PARSE_STRING(py_config, libdir, config, 1);
 	return parser_daemon(py_config, config);
 }
 
 static int
-add_syspath(const char* path) {
-	PyObject* syspath = PySys_GetObject("path");
-	PyObject* dir = PyUnicode_FromString(path);
-	PyObject* lib_dir = PyUnicode_Concat(dir, PyUnicode_FromString("/python-lib"));
-	PyList_Insert(syspath, 0, lib_dir);
-	PyList_Insert(syspath, 1, dir);
+add_syspath(PyObject* syspath, const char* path, size_t len) {
+	PyObject* dir = PyUnicode_FromStringAndSize(path, len);
+	PyList_Insert(syspath, 0, dir);
 	Py_DECREF(dir);
-	Py_DECREF(lib_dir);
+	return SGE_OK;
+}
+
+static int
+add_custom_lib(PyObject* syspath, const char* basedir, size_t baselen, const char* dir, size_t len) {
+	char fullpath[1024];
+
+	if (*dir == '/') {
+		add_syspath(syspath, dir, len);
+	} else {
+		len = sprintf(fullpath, "%s/%.*s", basedir, len, dir);
+		add_syspath(syspath, fullpath, len);
+	}
+	return SGE_OK;
+}
+
+static int
+add_custom_libs(PyObject* syspath, const char* basedir, const char* dirs) {
+	size_t len;
+	const char* p1, *p2;
+	size_t baselen = strlen(basedir);
+
+	if (NULL == dirs) {
+		goto FIN;
+	}
+
+	p1 = p2 = dirs;
+
+	while(1) {
+		p2 = strchr(p2, ';');
+		if (NULL == p2) {
+			break;
+		}
+		add_custom_lib(syspath, basedir, baselen, p1, p2 - p1);
+		p1 = p2 + 1;
+	}
+
+	if (*p1) {
+		add_custom_lib(syspath, basedir, baselen, p1, strlen(dirs) - (p1 - dirs));
+	}
+
+FIN:
+	add_syspath(syspath, basedir, baselen);
+	return SGE_OK;
+}
+
+static int
+init_python_syspath(sge_config* config) {
+	PyObject* syspath = PySys_GetObject("path");
+	add_custom_libs(syspath, config->workdir, config->libdir);
 	Py_DECREF(syspath);
 	return SGE_OK;
 }
 
 static int
 load_entry_file(sge_config* config) {
-	add_syspath(config->workdir);
+	init_python_syspath(config);
 
 	PyObject* module = PyImport_ImportModule(config->entry_file);
 	if (NULL == module) {
@@ -341,7 +388,6 @@ load_entry_file(sge_config* config) {
 		return SGE_ERR;
 	}
 
-	Py_DECREF(module);
 	CALLBACK_FUNC = func;
 
 	return SGE_OK;
@@ -419,10 +465,7 @@ ERROR:
 	CHECK_SCRIPT_ERROR();
 RET:
 	Py_XDECREF(py_config);
-	Py_XDECREF(module);
-	Py_XDECREF(code);
 	return retcode;
-	return SGE_OK;
 }
 
 int
