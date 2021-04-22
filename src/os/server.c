@@ -171,6 +171,24 @@ init_signal() {
 }
 
 static int
+write_socket(sge_socket* sock, const char* str, size_t len) {
+	int ret;
+
+	ret = write(sock->fd, str, len);
+	if (ret < 0) {
+		SYS_ERROR();
+		if (errno != EINTR || errno != EAGAIN) {
+			sendto_worker(CMD_CLOSE, sock->fd, NULL, NULL);
+			clear_buffer(sock->w_buf);
+			close_socket(sock);
+			return SGE_ERR;
+		}
+		ret = 0;
+	}
+	return ret;
+}
+
+static int
 init_unix_socket(const char* sock) {
 	int fd, retcode;
 	struct sockaddr_un addr;
@@ -350,9 +368,8 @@ on_conn_writeable(sge_socket* sock) {
 	size_t len;
 
 	const char* str = buffer_data(sock->w_buf, &len);
-	nwrite = write(sock->fd, str, len);
-	if (nwrite < 0) {
-		SYS_ERROR();
+	nwrite = write_socket(sock, str, len);
+	if (nwrite == SGE_ERR) {
 		return SGE_ERR;
 	}
 	erase_buffer(sock->w_buf, 0, nwrite);
@@ -392,14 +409,11 @@ write_socket_data(sge_socket* sock, sge_buffer* buf) {
 	size_t len;
 	const char* str = buffer_data(buf, &len);
 
-	nwrite = write(sock->fd, str, len);
-	if (nwrite == len) {
-		return SGE_OK;
+	nwrite = write_socket(sock, str, len);
+	if (nwrite == SGE_ERR) {
+		return SGE_ERR;
 	}
-	if (nwrite < 0) {
-		SYS_ERROR();
-		nwrite = 0;
-	}
+
 	sock->w_buf = append_buffer(sock->w_buf, str + nwrite, len - nwrite);
 	SERVER.event->add(SERVER.event, sock, EVT_WRITE);
 	return SGE_OK;

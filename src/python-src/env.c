@@ -49,6 +49,7 @@ if (!py_result || py_result == Py_None || py_result == Py_False) {				\
 static int new_conn(sge_message* msg);
 static int on_message(sge_message* msg);
 static int on_read_done(sge_message* msg);
+static int on_close(sge_message* msg);
 static int output_error(int id);
 static PyObject* call_cb(PyObject* conn);
 static PyObject* py_close_conn(PyObject* conn, PyObject* args);
@@ -65,7 +66,7 @@ static const cb_worker MESSAGE_CBS[] = {
 	new_conn,
 	on_message,
 	on_read_done,
-	NULL
+	on_close
 };
 
 
@@ -179,6 +180,16 @@ RET:
 	Py_DECREF(ret);
 	Py_XDECREF(func);
 	return SGE_OK;
+}
+
+int
+on_close(sge_message* msg) {
+	PyObject* conn = CONNECTIONS[msg->id];
+	if (NULL == conn) {
+		return;
+	}
+	Py_DECREF(conn);
+	CONNECTIONS[msg->id] = NULL;
 }
 
 PyObject*
