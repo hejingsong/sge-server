@@ -334,11 +334,11 @@ on_accept(sge_socket* sock) {
 	set_non_block(conn);
 	conn->on_read = on_conn_readable;
 	conn->on_write = on_conn_writeable;
+	add_socket(&SERVER, conn);
 	if (SERVER.event->add(SERVER.event, conn, EVT_READ) == SGE_ERR) {
 		_destroy_socket(conn);
 		return SGE_ERR;
 	}
-	add_socket(&SERVER, conn);
 	sendto_worker(CMD_NEW_CONN, clt, NULL, (void*)&(conn->fd));
 	return SGE_OK;
 }
@@ -439,6 +439,9 @@ close_socket(sge_socket* sock) {
 
 void
 _destroy_socket(sge_socket* sock) {
+	if (sock->status == SOCKET_CLOSED) {
+		return;
+	}
 	SERVER.sock_num--;
 	if (sock->events) {
 		SERVER.event->remove(SERVER.event, sock, sock->events);
